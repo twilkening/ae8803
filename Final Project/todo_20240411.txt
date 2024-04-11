@@ -1,0 +1,6 @@
+JetBot IP address: 192.168.1.231
+
+For tomorrow:
+- setup X11 forwarding so I can operate JetBot completely remotely from my PC
+- look into getting a fan for the heat sink... it's hot! even without running anything.
+- get the collision avoidance notebook up and running! :)
