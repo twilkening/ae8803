@@ -8,13 +8,13 @@ New to qwiic? Take a look at the entire [SparkFun qwiic ecosystem](https://www.s
 ## Contents
 
 - [Qwiic\_Ads1115\_Py](#qwiic_ads1115_py)
-	- [Contents](#contents)
-	- [Dependencies](#dependencies)
-	- [TODO: update the remaining sections](#todo-update-the-remaining-sections)
-	- [Installation](#installation)
-		- [PyPi Installation](#pypi-installation)
-		- [Local Installation](#local-installation)
-	- [Example Use](#example-use)
+  - [Contents](#contents)
+  - [Dependencies](#dependencies)
+  - [**TODO: update the remaining sections**](#todo-update-the-remaining-sections)
+  - [Installation](#installation)
+    - [PyPi Installation](#pypi-installation)
+    - [Local Installation](#local-installation)
+  - [Example Use](#example-use)
 
 Dependencies
 ---------------
@@ -22,7 +22,7 @@ Dependencies
 This driver package depends on the qwiic I2C driver:
 [Qwiic_I2C_Py](https://github.com/sparkfun/Qwiic_I2C_Py)
 
-TODO: update the remaining sections
+**TODO: update the remaining sections**
 -------------
 
 Installation
