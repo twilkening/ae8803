@@ -243,7 +243,10 @@ class QwiicAds1115(object):
         Returns:
             success (int): returns 0 for failure, or 1 for success
         """
-        # TODO
+        sum = 0
+        for _ in range(0, n):
+            sum += self.get_measurement()
+        self.cal_offset = sum / n
 
     def reset_cal(self):
         """
@@ -284,7 +287,7 @@ class QwiicAds1115(object):
 
         # convert the register data
         gain = GAINS[int(self.gain, base=2)]
-        measurement = val / 2**15 * gain * self.scale
+        measurement = (val / 2**15 * gain - self.cal_offset) * self.scale
 
         return measurement
 
