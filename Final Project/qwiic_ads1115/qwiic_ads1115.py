@@ -78,7 +78,6 @@ New to qwiic? Take a look at the entire
 from __future__ import print_function
 
 import qwiic_i2c
-from bitarray import bitarray
 import time
 
 # Define the device name and I2C addresses. These are set in the class
@@ -244,6 +243,7 @@ class QwiicAds1115(object):
         Returns:
             success (int): returns 0 for failure, or 1 for success
         """
+        # TODO
 
     def reset_cal(self):
         """
@@ -283,7 +283,8 @@ class QwiicAds1115(object):
         val = reg[0] << 8 | reg[1]
 
         # convert the register data
-        measurement = val / 2 ^ 15 * GAINS(self.gain) * self.scale
+        gain = GAINS[int(self.gain, base=2)]
+        measurement = val / 2**15 * gain * self.scale
 
         return measurement
 
@@ -299,17 +300,14 @@ class QwiicAds1115(object):
         """
         # build the configuration command
         cfg_block = [
-            int.from_bytes(
-                bitarray(self.os + self.mux + self.gain + self.mode)
-            ),  # noqa
-            int.from_bytes(
-                bitarray(
-                    self.data_rate
-                    + self.comp_mode
-                    + self.comp_pol
-                    + self.comp_latch
-                    + self.comp_que
-                )
+            int(self.os + self.mux + self.gain + self.mode, base=2),  # noqa
+            int(
+                self.data_rate
+                + self.comp_mode
+                + self.comp_pol
+                + self.comp_latch
+                + self.comp_que,
+                base=2,
             ),
         ]
 
@@ -335,8 +333,8 @@ class QwiicAds1115(object):
         # [os + mux + gain + mode]
         # [data_rate + comp_mode + comp_pol + comp_latch + comp_que]
         cfg_block = [
-            int.from_bytes(bitarray("1" + "000" + "010" + "1")),
-            int.from_bytes(bitarray("100" + "0" + "0" + "0" + "11")),
+            int("1" + "000" + "010" + "1", base=2),
+            int("100" + "0" + "0" + "0" + "11", base=2),
         ]
         # send the configuration command on the i2c bus
         self._i2c.writeBlock(self.address, CONFIG, cfg_block)
