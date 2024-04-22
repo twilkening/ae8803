@@ -244,8 +244,11 @@ class QwiicAds1115(object):
             success (int): returns 0 for failure, or 1 for success
         """
         sum = 0
+        data_rates = [8, 16, 32, 64, 128, 250, 475, 860]
+        delay = 1 / data_rates[int(self.data_rate, base=2)] + 0.01
         for _ in range(0, n):
             sum += self.get_measurement()
+            time.sleep(delay)
         self.cal_offset = sum / n
 
     def reset_cal(self):
