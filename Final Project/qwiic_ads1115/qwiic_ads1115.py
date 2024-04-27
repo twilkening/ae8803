@@ -245,7 +245,7 @@ class QwiicAds1115(object):
         """
         sum = 0
         data_rates = [8, 16, 32, 64, 128, 250, 475, 860]
-        delay = 1 / data_rates[int(self.data_rate, base=2)] + 0.01
+        delay = 1 / data_rates[int(self.data_rate, base=2)] + 0.01  # ms
         for _ in range(0, n):
             sum += self.get_measurement()
             time.sleep(delay)
@@ -352,7 +352,7 @@ class QwiicAds1115(object):
         success = cfg_block == cfg_set
         return int(success)
 
-    def config(self):
+    def get_config(self):
         """
         Gets and prints the current configuration settings of the
         ads1115.
