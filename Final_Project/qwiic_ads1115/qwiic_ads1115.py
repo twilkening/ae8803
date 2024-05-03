@@ -62,7 +62,7 @@
 # SOFTWARE.
 # =============================================================================
 """
-qwiic_joystick
+qwiic_ads1115
 ===============
 Python module for the ADC component ADS1115.
 
