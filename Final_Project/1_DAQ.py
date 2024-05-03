@@ -88,8 +88,15 @@ while True:
     # Generate or receive your data
     data = get_new_data(ads)
     cur.executemany(
-        "INSERT INTO daq_table (time, measured_value) VALUES (%s, %s)", data
-    )  # noqa
+        " ".join(
+            [
+                "INSERT INTO daq_table",
+                "(time, measured_value, processed)",
+                "VALUES (%s, %s, %s)",
+            ]
+        ),
+        data,
+    )
     conn.commit()
     sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
 

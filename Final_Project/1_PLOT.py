@@ -34,26 +34,35 @@ class ExactGPModel(gpytorch.models.ExactGP):
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 
-def GPRegression(meas, meas_new, test_x, model):
+def GPRegression(conn, meas, meas_new, test_x, model):
     # Perform Regression on the new data
-    # NOTE: based on size of the GPRegression kernel, we will need to
-    # delete some of the old prediction data and fill it in with the
-    # newly processed prediction of the mean now that we have samples
 
-    # columns:
+    # columns of the mean_table:
     # time, meas_mean, processed
 
     # pull the un-processed data from the mean_table
-    # if there isn't any,
-    #   set train_x & train_y = meas_new only
-    # else
-    # set train_x & train_y = [un-processed, meas_new]
-    # then update the model training data
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT time, meas_mean FROM mean_table WHERE processed = FALSE"
+    )  # noqa
+    rows = cur.fetchall()
+    meas_unprocessed = np.asarray(rows).T
+    if len(meas_unprocessed) == 0:
+        train_x = meas_new[0, :]
+        train_y = meas_new[1, :]
+    else:
+        meas_both = np.hstack((meas_unprocessed, meas_new))
+        train_x = meas_both[0, :]
+        train_y = meas_both[1, :]
+
+    # update the model training data
     model.set_train_data(train_x, train_y)
 
     # mark the un-processed data as processed now
-
-    # set test_x = test_x
+    cur.execute(
+        "UPDATE mean_table SET processed = TRUE WHERE processed = FALSE"  # noqa
+    )  # noqa
+    conn.commit()
 
     # run the GPModel prediction by feeding model through likelihood
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
@@ -61,7 +70,21 @@ def GPRegression(meas, meas_new, test_x, model):
         gp_mean_new = model.likelihood(model(train_x))
 
     # update mean_table with meas_new data, flag as un-processed
-
+    processed_flag = np.zeros(meas_new.shape[1], dtype=bool)  # row of False
+    data = np.vstack((meas_new, processed_flag)).T  # transpose after stacking
+    data = [tuple(row) for row in data]  # convert to tuple for SQL
+    cur.executemany(
+        " ".join(
+            [
+                "INSERT INTO mean_table",
+                "(time, meas_mean, processed)",
+                "VALUES (%s, %s, %s)",
+            ]
+        ),
+        data,
+    )
+    conn.commit()
+    conn.close()
     return gp_mean_new, pred_new
 
 
@@ -84,16 +107,21 @@ def fetch_and_plot_data(conn, lines, model):
         "UPDATE daq_table SET processed = TRUE WHERE processed = FALSE"  # noqa
     )  # noqa
     conn.commit()
+    cur.close()
 
     # calculate regression
     # based on the measured data, and the GPModel, compute expected mean
     # for the new times
     test_x = np.linspace(meas[0, -1], meas[0, -1] + 5, 25)
-    gp_mean_new, pred_new = GPRegression(meas, meas_new, test_x, model)
+    gp_mean_new, pred_new = GPRegression(conn, meas, meas_new, test_x, model)
 
     # plot *measured* mean
     line_gp_mean = lines[1]
     gp_mean_old = np.asarray(line_gp_mean.get_data())  # outputs (2, N) array
+    # TODO might need to reduce size of gp_mean_old by the size of
+    # gp_mean_new in order to account for the updates of the gp_mean
+    # based on new measured data (going back some so that I have a
+    # broader training base for the posterior predictive calculation)
     gp_mean = np.hstack((gp_mean_old, gp_mean_new))
     line_gp_mean.set_data(gp_mean[0, :] - t0, gp_mean[1, :])
 
@@ -101,7 +129,9 @@ def fetch_and_plot_data(conn, lines, model):
     line_pred_mean = lines[2]
     line_pred_mean.set_data(pred_new[0, :] - t0, pred_new[1, :])
 
-    cur.close()
+    # update the plot
+    plt.xlim([0, 100])
+    plt.ylim([-0.1, 0.1])
     plt.draw()
 
     return [line_meas, line_gp_mean, line_pred_mean]
