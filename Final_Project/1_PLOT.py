@@ -44,9 +44,13 @@ def GPRegression(conn, meas, meas_new, test_x, model):
         train_x = meas_both[0, :]
         train_y = meas_both[1, :]
 
-    train_x = torch.from_numpy(train_x)
-    train_y = torch.from_numpy(train_y)
+    train_x = torch.from_numpy(train_x.astype(np.float32))
+    train_y = torch.from_numpy(train_y.astype(np.float32))
     test_x = torch.from_numpy(test_x)
+    # normalize the target values to [-1 1]
+    max_y = max(abs(train_y))
+    train_y = train_y / max_y
+    scale = max_y.numpy()
 
     # update the model training data
     model.set_train_data(train_x, train_y)
@@ -65,13 +69,19 @@ def GPRegression(conn, meas, meas_new, test_x, model):
     # combine the actual mean data from the GPModel predictive
     # posteriors with the respective x values
     pred_new = np.vstack(
-        (test_x.numpy().reshape(1, -1), pred_mean.mean.numpy().reshape(1, -1))
+        (
+            test_x.numpy().reshape(1, -1),
+            pred_mean.mean.numpy().reshape(1, -1) * scale,  # noqa
+        )
     )
     gp_mean_new = np.vstack(
-        (train_x.numpy().reshape(1, -1), obs_mean.mean.numpy().reshape(1, -1))
+        (
+            train_x.numpy().reshape(1, -1),
+            obs_mean.mean.numpy().reshape(1, -1) * scale,  # noqa
+        )
     )
 
-    # add to mean_table with meas_new data, flag as un-processed
+    # add to mean_table the meas_new data, flag as un-processed
     processed_flag = np.zeros(meas_new.shape[1], dtype=bool)  # row of False
     data = np.vstack((meas_new, processed_flag)).T  # transpose after stacking
     data = [tuple(row) for row in data]  # convert to tuple for SQL
@@ -182,7 +192,9 @@ class ExactGPModel(gpytorch.models.ExactGP):
     def __init__(self, train_x, train_y, likelihood):
         super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
         self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+        self.covar_module = gpytorch.kernels.ScaleKernel(
+            gpytorch.kernels.RBFKernel()  # noqa
+        )  # noqa
 
     def forward(self, x):
         mean_x = self.mean_module(x)
