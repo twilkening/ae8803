@@ -17,21 +17,10 @@ import sys
 if sys.platform == "win32":
     sys.path.insert(
         0,
-        "C:\\Users\\twilkeni\\AppData\\Local\\anaconda3\\envs\\pytorch-env\\site-packages",
+        "C:\\Users\\twilkeni\\AppData\\Local"
+        + "\\anaconda3\\envs\\pytorch-env\\site-packages",
     )
 import gpytorch
-
-
-class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
-        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 
 def GPRegression(conn, meas, meas_new, test_x, model):
@@ -82,7 +71,7 @@ def GPRegression(conn, meas, meas_new, test_x, model):
         (train_x.numpy().reshape(1, -1), obs_mean.mean.numpy().reshape(1, -1))
     )
 
-    # update mean_table with meas_new data, flag as un-processed
+    # add to mean_table with meas_new data, flag as un-processed
     processed_flag = np.zeros(meas_new.shape[1], dtype=bool)  # row of False
     data = np.vstack((meas_new, processed_flag)).T  # transpose after stacking
     data = [tuple(row) for row in data]  # convert to tuple for SQL
@@ -159,13 +148,27 @@ def scheduled_fetch(model):
     plt.ion()
     fig, ax = plt.subplots()
     t0 = time.time()
+    gp_update_interval = 20  # seconds
     (line_meas,) = ax.plot(t0, 0, "k*")  # init measured data scatter
     (line_gp_mean,) = ax.plot(t0, 0, "b")  # init GP mean line
     (line_pred_mean,) = ax.plot(t0, 0, "g")  # init prediction line
     lines = [line_meas, line_gp_mean, line_pred_mean]
+    i = 1
     try:
         while True:
             lines = fetch_and_plot_data(conn, lines, model)
+            if (time.time() - t0) / gp_update_interval > i:
+                i += 1
+                # check to see if new parameters are available
+                cur = conn.cursor()
+                cur.execute("SELECT gp_update_avail FROM gp_table")
+                gp_update_avail = cur.fetchone()
+                if gp_update_avail:
+                    # update model parameters if update available
+                    model.load_state_dict(state_dict)
+                    # set the flag to gp update un-available
+                    cur.execute("UPDATE gp_table SET gp_update_avail = FALSE")
+                cur.close()
             time.sleep(2)  # Fetch data every 2 seconds
     except KeyboardInterrupt:
         print("Stopped by user.")
@@ -174,11 +177,33 @@ def scheduled_fetch(model):
         plt.close()
 
 
-# load model from off-line training data, will have optimized
-# hyperparameters and also comes with training data on it. TODO
-# model = load model
+# Define ExactGPModel
+class ExactGPModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x, train_y, likelihood):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+
+# load model from off-line training data
+train_x = torch.load("data/train_x.pth")
+train_y = torch.load("data/train_y.pth")
+likelihood = gpytorch.likelihoods.GaussianLikelihood(
+    noise_constraint=gpytorch.constraints.GreaterThan(1e-3),
+    noise_prior=gpytorch.priors.NormalPrior(0, 0.1),
+)
+state_dict = torch.load("data/model_state_test.pth")
+model = ExactGPModel(train_x, train_y, likelihood)
+model.load_state_dict(state_dict)
 
 scheduled_fetch(model)
+
+# TODO: create a function to delete all of the data from SQL server if desired
 
 # # plotting notes:
 # line, = ax.plot(x, y, 'r-')  # The comma is important to unpack the

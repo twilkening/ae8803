@@ -12,7 +12,18 @@ from time import sleep
 from qwiic_ads1115.qwiic_ads1115 import QwiicAds1115
 import time
 
-# Connect to your PostgreSQL database
+# NOTE: before we can connect to the PostgreSQL database, it first has
+# to be created from the command line interface via psql. See the
+# following webpages:
+# https://www.postgresqltutorial.com/postgresql-python/connect/
+# https://www.postgresqltutorial.com/postgresql-getting-started/install-postgresql-linux/
+
+# NOTE: we also need to *start* the PostgreSQL database everytime the
+# system is powered on:
+# sudo systemctl start postgresql
+# sudo systemctl enable postgresql
+
+# Connect to the PostgreSQL database
 conn = psycopg2.connect("dbname=test user=postgres")
 cur = conn.cursor()
 
@@ -83,22 +94,45 @@ def get_new_data(ads_object):
     return data
 
 
+# initialize gp_table
+cur.execute("INSERT INTO gp_table (gp_update_avail) VALUES (%s)", (False))
+
+
+# initialize mean_table
+cur.execute(
+    " ".join(
+        [
+            "INSERT INTO mean_table",
+            "(time, meas_mean, processed)",
+            "VALUES (%s, %s, %s)",
+        ]
+    ),
+    (time.time(), 0, True),
+)
+
+
 # Insert data continuously
-while True:
-    # Generate or receive your data
-    data = get_new_data(ads)
-    cur.executemany(
-        " ".join(
-            [
-                "INSERT INTO daq_table",
-                "(time, measured_value, processed)",
-                "VALUES (%s, %s, %s)",
-            ]
-        ),
-        data,
-    )
-    conn.commit()
-    sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
+try:
+    while True:
+        # Generate or receive your data
+        data = get_new_data(ads)
+        cur.executemany(
+            " ".join(
+                [
+                    "INSERT INTO daq_table",
+                    "(time, measured_value, processed)",
+                    "VALUES (%s, %s, %s)",
+                ]
+            ),
+            data,
+        )
+        conn.commit()
+        sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
+except KeyboardInterrupt:
+    print("stopped by user.")
+finally:
+    cur.close()
+    conn.close()
 
 # if we only want one measurement per entry
 # # Define function to get one set of new data
