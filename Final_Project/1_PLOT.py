@@ -55,6 +55,10 @@ def GPRegression(conn, meas, meas_new, test_x, model):
         train_x = meas_both[0, :]
         train_y = meas_both[1, :]
 
+    train_x = torch.from_numpy(train_x)
+    train_y = torch.from_numpy(train_y)
+    test_x = torch.from_numpy(test_x)
+
     # update the model training data
     model.set_train_data(train_x, train_y)
 
@@ -66,8 +70,17 @@ def GPRegression(conn, meas, meas_new, test_x, model):
 
     # run the GPModel prediction by feeding model through likelihood
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        pred_new = model.likelihood(model(test_x))
-        gp_mean_new = model.likelihood(model(train_x))
+        pred_mean = model.likelihood(model(test_x))
+        obs_mean = model.likelihood(model(train_x))
+
+    # combine the actual mean data from the GPModel predictive
+    # posteriors with the respective x values
+    pred_new = np.vstack(
+        (test_x.numpy().reshape(1, -1), pred_mean.mean.numpy().reshape(1, -1))
+    )
+    gp_mean_new = np.vstack(
+        (train_x.numpy().reshape(1, -1), obs_mean.mean.numpy().reshape(1, -1))
+    )
 
     # update mean_table with meas_new data, flag as un-processed
     processed_flag = np.zeros(meas_new.shape[1], dtype=bool)  # row of False
@@ -84,7 +97,8 @@ def GPRegression(conn, meas, meas_new, test_x, model):
         data,
     )
     conn.commit()
-    conn.close()
+    cur.close()
+
     return gp_mean_new, pred_new
 
 
@@ -118,10 +132,13 @@ def fetch_and_plot_data(conn, lines, model):
     # plot *measured* mean
     line_gp_mean = lines[1]
     gp_mean_old = np.asarray(line_gp_mean.get_data())  # outputs (2, N) array
-    # TODO might need to reduce size of gp_mean_old by the size of
-    # gp_mean_new in order to account for the updates of the gp_mean
-    # based on new measured data (going back some so that I have a
-    # broader training base for the posterior predictive calculation)
+    # compare size of gp_mean_new with meas_new
+    gp_mean_replace_sz = gp_mean_new.shape[1] - meas_new.shape[1]
+    # remove gp_mean_old data that is being replaced by new estimates
+    # given the updated set of observations
+    if gp_mean_replace_sz > 0:
+        gp_mean_old = gp_mean_old[:, 0:-gp_mean_replace_sz]
+
     gp_mean = np.hstack((gp_mean_old, gp_mean_new))
     line_gp_mean.set_data(gp_mean[0, :] - t0, gp_mean[1, :])
 
