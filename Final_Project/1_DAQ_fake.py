@@ -118,7 +118,8 @@ def create_tables():
         """,
         """
         CREATE TABLE mean_table (
-            time FLOAT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
+            time FLOAT,
             meas_mean FLOAT NOT NULL,
             processed BOOLEAN NOT NULL DEFAULT FALSE
         )

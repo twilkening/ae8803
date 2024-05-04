@@ -23,27 +23,22 @@ if sys.platform == "win32":
 import gpytorch
 from config import load_config
 
+train_num = 400
+
 
 def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
     # Perform Regression on the new data
 
-    # columns of the mean_table:
-    # time, meas_mean, processed
-
-    # pull the un-processed data from the mean_table
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT time, meas_mean FROM mean_table WHERE processed = FALSE"
-    )  # noqa
-    rows = cur.fetchall()
-    meas_unprocessed = np.asarray(rows).T
-    if len(meas_unprocessed) == 0:
-        train_x = meas_new[0, :]
-        train_y = meas_new[1, :]
+    # get up to the last 'train_num' measurements/observations
+    num_new = meas_new.shape[1]
+    if meas.shape[1] <= (train_num + num_new):
+        print("using entire meas")
+        train_x = meas[0, :]
+        train_y = meas[1, :]
     else:
-        meas_both = np.hstack((meas_unprocessed, meas_new))
-        train_x = meas_both[0, :]
-        train_y = meas_both[1, :]
+        print(f"using last {train_num + num_new} of data")
+        train_x = meas[0, -(train_num + num_new) :]  # noqa
+        train_y = meas[1, -(train_num + num_new) :]  # noqa
 
     train_x = torch.from_numpy(train_x.astype(np.float32))
     train_y = torch.from_numpy(train_y.astype(np.float32))
@@ -55,12 +50,6 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
 
     # update the model training data
     model.set_train_data(train_x, train_y, strict=False)
-
-    # mark the un-processed data as processed now
-    cur.execute(
-        "UPDATE mean_table SET processed = TRUE WHERE processed = FALSE"  # noqa
-    )  # noqa
-    conn.commit()
 
     # Get into evaluation (predictive posterior) mode
     model.eval()
@@ -86,28 +75,33 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
         )
     )
 
-    # add to mean_table the meas_new data, flag as un-processed
+    # add to mean_table the (possibly re-processed) obs_mean data, flag
+    # as un-processed
     data = [
-        (meas_new[0, i], meas_new[1, i], False)
-        for i in range(meas_new.shape[1])  # noqa
+        (
+            gp_mean_new[0, -num_new + i].astype(np.double),
+            gp_mean_new[1, -num_new + i].astype(np.double),
+            False,
+        )
+        for i in range(num_new)  # noqa
     ]  # noqa
-    cur.executemany(
-        " ".join(
-            [
-                "INSERT INTO mean_table",
-                "(time, meas_mean, processed)",
-                "VALUES (%s, %s, %s)",
-            ]
-        ),
-        data,
-    )
-    conn.commit()
-    cur.close()
+    with conn.cursor() as cur:
+        cur.executemany(
+            " ".join(
+                [
+                    "INSERT INTO mean_table",
+                    "(time, meas_mean, processed)",
+                    "VALUES (%s, %s, %s)",
+                ]
+            ),
+            data,
+        )
+        conn.commit()
 
     return gp_mean_new, pred_new
 
 
-def fetch_and_plot_data(conn, lines, model, likelihood):
+def fetch_and_plot_data(conn, lines, model, likelihood, tstart):
     cur = conn.cursor()
     cur.execute(
         "SELECT time, measured_value FROM daq_table WHERE processed = FALSE"
@@ -118,10 +112,10 @@ def fetch_and_plot_data(conn, lines, model, likelihood):
     if len(meas_new) != 0:
         # plot new data alongside the old data
         line_meas = lines[0]
+        meas_new[0, :] = meas_new[0, :] - tstart  # shift x
         meas_old = np.asarray(line_meas.get_data())  # outputs (2, N) array
         meas = np.hstack((meas_old, meas_new))
-        t0 = meas[0, 0]
-        line_meas.set_data(meas[0, :] - t0, meas[1, :])
+        line_meas.set_data(meas[0, :], meas[1, :])
         # mark the measured data as processed:
         cur.execute(
             "UPDATE daq_table SET processed = TRUE WHERE processed = FALSE"  # noqa
@@ -132,35 +126,40 @@ def fetch_and_plot_data(conn, lines, model, likelihood):
         # calculate regression
         # based on the measured data, and the GPModel, compute expected mean
         # for the new times
-        test_x = np.linspace(meas[0, -1], meas[0, -1] + 5, 25)
+        test_x = np.linspace(meas[0, -1], meas[0, -1] + 10, 50)
         gp_mean_new, pred_new = GPRegression(
             conn, meas, meas_new, test_x, model, likelihood
         )
 
         # plot *measured* mean
         line_gp_mean = lines[1]
-        gp_mean_old = np.asarray(line_gp_mean.get_data())  # outputs (2, N) array
-        # compare size of gp_mean_new with meas_new
-        gp_mean_replace_sz = gp_mean_new.shape[1] - meas_new.shape[1]
+        # get old gp_mean plot data, as (2, N) array
+        gp_mean_old = np.asarray(line_gp_mean.get_data())
         # remove gp_mean_old data that is being replaced by new estimates
         # given the updated set of observations
-        if gp_mean_replace_sz > 0:
-            gp_mean_old = gp_mean_old[:, 0:-gp_mean_replace_sz]
+        if gp_mean_old.shape[1] <= train_num:
+            print("replacing the entire old mean line")
+            gp_mean = gp_mean_new
+        else:
+            print(f"replacing only the last {train_num} entries to mean line")
+            print(f"gp_mean_new length: {gp_mean_new.shape[1]}")
+            gp_mean = np.hstack((gp_mean_old[:, :-train_num], gp_mean_new))
 
-        gp_mean = np.hstack((gp_mean_old, gp_mean_new))
-        line_gp_mean.set_data(gp_mean[0, :] - t0, gp_mean[1, :])
+        line_gp_mean.set_data(gp_mean[0, :], gp_mean[1, :])
 
         # plot *predictive* mean
         line_pred_mean = lines[2]
-        line_pred_mean.set_data(pred_new[0, :] - t0, pred_new[1, :])
+        line_pred_mean.set_data(pred_new[0, :], pred_new[1, :])
 
         # update the plot
-        plt.xlim([0, 100])
-        plt.ylim([-0.1, 0.1])
+        plt.xlim([0, 200])
+        plt.ylim([-0.06, 0.06])
         plt.draw()
+        print("plot updated")
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
+        print("no new data")
         new_lines = lines
 
     return new_lines
@@ -171,9 +170,9 @@ def scheduled_fetch(model, likelihood):
     fig, ax = plt.subplots()
     t0 = time.time()
     gp_update_interval = 20  # seconds
-    (line_meas,) = ax.plot(t0, 0, "k*")  # init measured data scatter
-    (line_gp_mean,) = ax.plot(t0, 0, "b")  # init GP mean line
-    (line_pred_mean,) = ax.plot(t0, 0, "g")  # init prediction line
+    (line_meas,) = ax.plot(0, 0, "k*")  # init measured data scatter
+    (line_gp_mean,) = ax.plot(0, 0, "r")  # init GP mean line
+    (line_pred_mean,) = ax.plot(0, 0, "g--")  # init prediction line
     lines = [line_meas, line_gp_mean, line_pred_mean]
     i = 1
     try:
@@ -181,7 +180,7 @@ def scheduled_fetch(model, likelihood):
         conn = psycopg2.connect(**config)
         while True:
             # fetch and plot data:
-            lines = fetch_and_plot_data(conn, lines, model, likelihood)
+            lines = fetch_and_plot_data(conn, lines, model, likelihood, t0)
 
             # # update the GP Model every gp_update_interval:
             # if (time.time() - t0) / gp_update_interval > i:
@@ -202,7 +201,7 @@ def scheduled_fetch(model, likelihood):
             #         )
             #     cur.close()
 
-            time.sleep(2)  # only fetch data every 2 seconds
+            plt.pause(5)  # only fetch data every 2 seconds
     except KeyboardInterrupt:
         print("Stopped by user.")
     finally:
