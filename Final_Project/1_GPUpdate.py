@@ -77,7 +77,7 @@ def GPUpdate(model, likelihood, conn):
         optimizer.step()
 
     # save the new model state_dict
-    torch.save(model.state_dict(), "data/model_state_test.pth")
+    torch.save(model.state_dict(), "data/model_state_update.pth")
 
     # set the flag for new gp hyperparameters available
     cur.execute("UPDATE gp_table SET gp_update_avail = TRUE WHERE id = 1;")
@@ -107,7 +107,7 @@ likelihood = gpytorch.likelihoods.GaussianLikelihood(
     noise_constraint=gpytorch.constraints.GreaterThan(1e-3),
     noise_prior=gpytorch.priors.NormalPrior(0, 0.1),
 )
-state_dict = torch.load("data/model_state_test.pth")
+state_dict = torch.load("data/model_state_start.pth")
 model = ExactGPModel(train_x, train_y, likelihood)
 model.load_state_dict(state_dict)
 

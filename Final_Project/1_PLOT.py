@@ -193,7 +193,7 @@ def scheduled_fetch(model, likelihood):
                 print(f"gp_update_avail: {gp_update_avail}")
                 if gp_update_avail[0]:
                     # update model parameters if update available
-                    state_dict = torch.load("data/model_state_test.pth")
+                    state_dict = torch.load("data/model_state_update.pth")
                     model.load_state_dict(state_dict)
                     # set the flag to gp update un-available
                     cur.execute(
@@ -234,13 +234,11 @@ likelihood = gpytorch.likelihoods.GaussianLikelihood(
     noise_constraint=gpytorch.constraints.GreaterThan(1e-3),
     noise_prior=gpytorch.priors.NormalPrior(0, 0.1),
 )
-state_dict = torch.load("data/model_state_test.pth")
+state_dict = torch.load("data/model_state_start.pth")
 model = ExactGPModel(train_x, train_y, likelihood)
 model.load_state_dict(state_dict)
 
 scheduled_fetch(model, likelihood)
-
-# TODO: create a function to delete all of the data from SQL server if desired
 
 # # plotting notes:
 # line, = ax.plot(x, y, 'r-')  # The comma is important to unpack the
@@ -253,6 +251,3 @@ scheduled_fetch(model, likelihood)
 # plt.ion()
 # Enable interactive mode, which shows / updates the figure after every
 # plotting command, so that calling show() is not necessary.
-# (don't need to use plt.pause())
-
-# SO. we'll need to track the lines and update them.
