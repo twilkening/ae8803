@@ -28,9 +28,13 @@ from config import load_config
 
 
 logger = logging.getLogger(__name__)
-FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(asctime)s : %(message)s"
 logging.basicConfig(
-    filename="logs/plot.log", filemode="w", format=FORMAT, level=logging.DEBUG
+    filename="logs/plot.log",
+    filemode="w",
+    format=FORMAT,
+    level=logging.DEBUG,
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 train_num = 400
