@@ -175,6 +175,8 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             ax.draw_artist(line_meas)
             ax.draw_artist(line_gp_mean)
             ax.draw_artist(line_pred_mean)
+            plt.xlim([0, 200])
+            plt.ylim([-0.06, 0.06])
             fig.canvas.draw()
             fig.canvas.flush_events()
 
