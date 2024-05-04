@@ -11,6 +11,8 @@ import psycopg2
 from time import sleep
 from qwiic_ads1115.qwiic_ads1115 import QwiicAds1115
 import time
+from config import load_config
+
 
 # NOTE: before we can connect to the PostgreSQL database, it first has
 # to be created from the command line interface via psql. See the
@@ -24,7 +26,8 @@ import time
 # sudo systemctl enable postgresql
 
 # Connect to the PostgreSQL database
-conn = psycopg2.connect("dbname=test user=postgres")
+config = load_config()
+conn = psycopg2.connect(**config)
 cur = conn.cursor()
 
 # configure the ADS1115

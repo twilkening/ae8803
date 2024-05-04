@@ -10,6 +10,9 @@
 import psycopg2
 import time
 import matplotlib.pyplot as plt
+
+# from IPython.display import display, clear_output
+import logging
 import numpy as np
 import torch
 import sys
@@ -22,6 +25,13 @@ if sys.platform == "win32":
     )
 import gpytorch
 from config import load_config
+
+
+logger = logging.getLogger(__name__)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(
+    filename="logs/plot.log", filemode="w", format=FORMAT, level=logging.DEBUG
+)
 
 train_num = 400
 
@@ -101,7 +111,7 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
     return gp_mean_new, pred_new
 
 
-def fetch_and_plot_data(conn, lines, model, likelihood, tstart):
+def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
     cur = conn.cursor()
     cur.execute(
         "SELECT time, measured_value FROM daq_table WHERE processed = FALSE"
@@ -138,11 +148,11 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart):
         # remove gp_mean_old data that is being replaced by new estimates
         # given the updated set of observations
         if gp_mean_old.shape[1] <= train_num:
-            print("replacing the entire old mean line")
+            logger.debug("replacing the entire old mean line")
             gp_mean = gp_mean_new
         else:
-            print(f"replacing only the last {train_num} entries to mean line")
-            print(f"gp_mean_new length: {gp_mean_new.shape[1]}")
+            logger.debug(f"replacing only the last {train_num} entries to mean line")
+            logger.debug(f"gp_mean_new length: {gp_mean_new.shape[1]}")
             gp_mean = np.hstack((gp_mean_old[:, :-train_num], gp_mean_new))
 
         line_gp_mean.set_data(gp_mean[0, :], gp_mean[1, :])
@@ -152,20 +162,30 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart):
         line_pred_mean.set_data(pred_new[0, :], pred_new[1, :])
 
         # update the plot
-        plt.xlim([0, 200])
-        plt.ylim([-0.06, 0.06])
-        plt.draw()
+        if __name__ == "__main__":
+            plt.xlim([0, 200])
+            plt.ylim([-0.06, 0.06])
+            plt.draw()
+        else:
+            ax.draw_artist(ax.patch)
+            ax.draw_artist(line_meas)
+            ax.draw_artist(line_gp_mean)
+            ax.draw_artist(line_pred_mean)
+            fig.canvas.draw()
+            fig.canvas.flush_events()
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
-        print("no new data")
+        logger.debug("no new data")
         new_lines = lines
 
     return new_lines
 
 
 def scheduled_fetch(model, likelihood):
-    plt.ion()
+    if __name__ == "__main__":
+        plt.ion()
+
     fig, ax = plt.subplots()
     t0 = time.time()
     gp_update_interval = 30  # seconds
@@ -179,7 +199,7 @@ def scheduled_fetch(model, likelihood):
         conn = psycopg2.connect(**config)
         while True:
             # fetch and plot data:
-            lines = fetch_and_plot_data(conn, lines, model, likelihood, t0)
+            lines = fetch_and_plot_data(conn, lines, model, likelihood, t0, fig, ax)
 
             # update the GP Model every gp_update_interval:
             if (time.time() - t0) / gp_update_interval > i:
@@ -190,7 +210,7 @@ def scheduled_fetch(model, likelihood):
                     "SELECT gp_update_avail FROM gp_table WHERE id = 1;"
                 )  # noqa
                 gp_update_avail = cur.fetchone()
-                print(f"gp_update_avail: {gp_update_avail}")
+                logger.debug(f"gp_update_avail: {gp_update_avail}")
                 if gp_update_avail[0]:
                     # update model parameters if update available
                     state_dict = torch.load("data/model_state_update.pth")
@@ -203,42 +223,42 @@ def scheduled_fetch(model, likelihood):
                 conn.commit()
                 cur.close()
 
-            plt.pause(5)  # only fetch data every 2 seconds
+            plt.pause(5)  # only fetch data every n seconds
 
     except KeyboardInterrupt:
-        print("Stopped by user.")
+        logger.debug("Stopped by user.")
     finally:
         conn.close()
         plt.close()
 
 
-# Define ExactGPModel
-class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
-        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel()  # noqa
-        )  # noqa
+if __name__ == "__main__":
+    # Define ExactGPModel
+    class ExactGPModel(gpytorch.models.ExactGP):
+        def __init__(self, train_x, train_y, likelihood):
+            super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+            self.mean_module = gpytorch.means.ConstantMean()
+            self.covar_module = gpytorch.kernels.ScaleKernel(
+                gpytorch.kernels.RBFKernel()  # noqa
+            )  # noqa
 
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        def forward(self, x):
+            mean_x = self.mean_module(x)
+            covar_x = self.covar_module(x)
+            return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
+    # load model from off-line training data
+    train_x = torch.load("data/train_x.pth")
+    train_y = torch.load("data/train_y.pth")
+    likelihood = gpytorch.likelihoods.GaussianLikelihood(
+        noise_constraint=gpytorch.constraints.GreaterThan(1e-3),
+        noise_prior=gpytorch.priors.NormalPrior(0, 0.1),
+    )
+    state_dict = torch.load("data/model_state_start.pth")
+    model = ExactGPModel(train_x, train_y, likelihood)
+    model.load_state_dict(state_dict)
 
-# load model from off-line training data
-train_x = torch.load("data/train_x.pth")
-train_y = torch.load("data/train_y.pth")
-likelihood = gpytorch.likelihoods.GaussianLikelihood(
-    noise_constraint=gpytorch.constraints.GreaterThan(1e-3),
-    noise_prior=gpytorch.priors.NormalPrior(0, 0.1),
-)
-state_dict = torch.load("data/model_state_start.pth")
-model = ExactGPModel(train_x, train_y, likelihood)
-model.load_state_dict(state_dict)
-
-scheduled_fetch(model, likelihood)
+    scheduled_fetch(model, likelihood)
 
 # # plotting notes:
 # line, = ax.plot(x, y, 'r-')  # The comma is important to unpack the
