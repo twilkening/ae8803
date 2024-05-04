@@ -139,6 +139,7 @@ def create_tables():
     try:
         config = load_config()  # sets connection to "test" database
         with psycopg2.connect(**config) as conn:
+            logger.debug("Connected to server for table creation.")
             with conn.cursor() as cur:
                 # execute the DROP TABLE statements
                 for drop in drops:
@@ -170,6 +171,7 @@ if __name__ == "__main__":
     # Connect to the PostgreSQL database
     config = load_config()  # sets connection to "test" database
     with psycopg2.connect(**config) as conn:
+        logger.debug("Connected to server")
         with conn.cursor() as cur:
             # initialize gp_table
             cur.execute(
