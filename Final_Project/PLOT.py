@@ -196,6 +196,9 @@ def scheduled_fetch(model, likelihood):
     (line_meas,) = ax.plot(0, 0, "k*")  # init measured data scatter
     (line_gp_mean,) = ax.plot(0, 0, "r")  # init GP mean line
     (line_pred_mean,) = ax.plot(0, 0, "g--")  # init prediction line
+    plt.title("GP Mean Prediction of Pressure Data")
+    plt.xlabel("time [s]")
+    plt.ylabel(r"Pressure; $\Delta$P [kPa]")
     lines = [line_meas, line_gp_mean, line_pred_mean]
     i = 1
     try:
@@ -233,7 +236,6 @@ def scheduled_fetch(model, likelihood):
         logger.debug("Stopped by user.")
     finally:
         conn.close()
-        plt.close()
 
 
 if __name__ == "__main__":

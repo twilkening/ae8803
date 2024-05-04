@@ -1,4 +1,0 @@
-JetBot IP address: 192.168.1.231
-
-For tomorrow:
-- setup X11 forwarding so I can operate JetBot completely remotely from my PC - need tigervnc server installed on the JetBot

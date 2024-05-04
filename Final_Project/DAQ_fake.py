@@ -64,7 +64,7 @@ rates = {
 period = 60
 amp = 0.04
 mean = -0.02
-var = amp / 20
+var = amp / 8
 omega = 2 * np.pi / period  # frequency [rad/s]
 
 
