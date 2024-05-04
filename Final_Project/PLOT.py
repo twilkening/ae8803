@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 
 train_num = 400
-
+torch.set_default_dtype(torch.float64)
 
 def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
     # Perform Regression on the new data
@@ -51,9 +51,9 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
         train_x = meas[0, -(train_num + num_new) :]  # noqa
         train_y = meas[1, -(train_num + num_new) :]  # noqa
 
-    train_x = torch.from_numpy(train_x.astype(np.float32))
-    train_y = torch.from_numpy(train_y.astype(np.float32))
-    test_x = torch.from_numpy(test_x.astype(np.float32))
+    train_x = torch.from_numpy(train_x.astype(np.float64))
+    train_y = torch.from_numpy(train_y.astype(np.float64))
+    test_x = torch.from_numpy(test_x.astype(np.float64))
     # normalize the target values to [-1 1]
     max_y = max(abs(train_y))
     train_y = train_y / max_y
@@ -177,13 +177,13 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             (line_gp_mean,) = ax.plot(
                 gp_mean[0, :], gp_mean[1, :], "r"
             )  # GP mean estimate line
+            logger.debug(pred_new)
             (line_pred_mean,) = ax.plot(
-                pred_new[0, :], pred_new[1, :], 0, "g--"
+                pred_new[0, :], pred_new[1, :], "g--"
             )  # prediction line
             plt.xlim([0, 200])
             plt.ylim([-0.06, 0.06])
             display(fig)
-            clear_output(wait=True)
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
@@ -197,6 +197,7 @@ def scheduled_fetch(model, likelihood):
     if __name__ == "__main__":
         plt.ion()
 
+    logger.debug(f"scheduled fetch started at {time.time()}")
     fig, ax = plt.subplots()
     t0 = time.time()
     gp_update_interval = 30  # seconds
@@ -238,7 +239,10 @@ def scheduled_fetch(model, likelihood):
                 conn.commit()
                 cur.close()
 
-            plt.pause(5)  # only fetch data every n seconds
+            clear_output(wait=True)
+            time.sleep(5)
+#             plt.pause(10)  # only fetch data every n seconds
+
 
     except KeyboardInterrupt:
         logger.debug("Stopped by user.")

@@ -35,6 +35,7 @@ logging.basicConfig(
 )
 
 train_num = 400
+torch.set_default_dtype(torch.float64)
 
 
 def GPUpdate(model, likelihood, conn):
@@ -46,8 +47,8 @@ def GPUpdate(model, likelihood, conn):
     rows = cur.fetchall()
     # transpose to (3, N) array, since it includes processed flag
     obs = np.asarray(rows).T
-    train_x = torch.from_numpy(obs[0, :].astype(np.float32))
-    train_y = torch.from_numpy(obs[1, :].astype(np.float32))
+    train_x = torch.from_numpy(obs[0, :].astype(np.float64))
+    train_y = torch.from_numpy(obs[1, :].astype(np.float64))
 
     # update the model training data
     model.set_train_data(train_x, train_y, strict=False)
