@@ -53,7 +53,7 @@ rates = {
 period = 60
 amp = 0.04
 mean = -0.02
-var = amp / 8
+var = amp / 20
 omega = 2 * np.pi / period  # frequency [rad/s]
 
 
@@ -70,7 +70,7 @@ def get_new_data(ads_object, tstart):
     tm = t0
 
     # noise for fake'd data
-    noise = np.random.randn(n) * var
+    noise = np.random.randn(int(n)) * var
 
     # ts in the while loop evaluation adds some buffer
     while tm < t0 + tcollect + ts:
@@ -79,10 +79,10 @@ def get_new_data(ads_object, tstart):
         # meas = ads_object.measure
         # fake'd data
         tpassed = tm - tstart
-        meas = mean + amp * abs(np.sin(tpassed * omega)) + noise[i]
 
         # add to the data array
         if i < n:
+            meas = mean + amp * abs(np.sin(tpassed * omega)) + noise[i]
             data.append((tm, meas, False))
 
         i += 1
@@ -163,30 +163,31 @@ if __name__ == "__main__":
             cur.execute(
                 "INSERT INTO gp_table (gp_update_avail) VALUES (FALSE)"  # noqa
             )  # noqa
-    # initialize the
-    # # Insert data continuously
-    # try:
-    #     while True:
-    #         # Generate or receive your data
-    #         t0 = time.time()
-    #         data = get_new_data(ads, t0)
-    #         cur.executemany(
-    #             " ".join(
-    #                 [
-    #                     "INSERT INTO daq_table",
-    #                     "(time, measured_value, processed)",
-    #                     "VALUES (%s, %s, %s)",
-    #                 ]
-    #             ),
-    #             data,
-    #         )
-    #         conn.commit()
-    #         sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
-    # except KeyboardInterrupt:
-    #     print("stopped by user.")
-    # finally:
-    #     cur.close()
-    #     conn.close()
+    # Insert data continuously
+    try:
+        conn = psycopg2.connect(**config)
+        cur = conn.cursor()
+        t0 = time.time()
+        while True:
+            # Generate or receive your data
+            data = get_new_data(ads, t0)
+            cur.executemany(
+                " ".join(
+                    [
+                        "INSERT INTO daq_table",
+                        "(time, measured_value, processed)",
+                        "VALUES (%s, %s, %s)",
+                    ]
+                ),
+                data,
+            )
+            conn.commit()
+            sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
+    except KeyboardInterrupt:
+        print("stopped by user.")
+    finally:
+        cur.close()
+        conn.close()
 
 # if we only want one measurement per entry
 # # Define function to get one set of new data

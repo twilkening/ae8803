@@ -62,6 +62,10 @@ def GPUpdate(model, likelihood, conn):
     train_x = obs[0, :]
     train_y = obs[1, :]
 
+    # set model and likelihood into train mode
+    model.train()
+    likelihood.train()
+
     # train the model for 5 iterations
     training_iter = 5
     # Use the adam optimizer
