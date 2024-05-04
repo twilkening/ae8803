@@ -32,11 +32,9 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
     # get up to the last 'train_num' measurements/observations
     num_new = meas_new.shape[1]
     if meas.shape[1] <= (train_num + num_new):
-        print("using entire meas")
         train_x = meas[0, :]
         train_y = meas[1, :]
     else:
-        print(f"using last {train_num + num_new} of data")
         train_x = meas[0, -(train_num + num_new) :]  # noqa
         train_y = meas[1, -(train_num + num_new) :]  # noqa
 
@@ -57,8 +55,10 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
 
     # run the GPModel prediction by feeding model through likelihood
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        # y* predictions (likelihood noise included)
         pred_mean = model.likelihood(model(test_x))
-        obs_mean = model.likelihood(model(train_x))
+        # f* predictions (noise-free)
+        obs_mean = model(train_x)
 
     # combine the actual mean data from the GPModel predictive
     # posteriors with the respective x values
@@ -155,7 +155,6 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart):
         plt.xlim([0, 200])
         plt.ylim([-0.06, 0.06])
         plt.draw()
-        print("plot updated")
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
@@ -169,7 +168,7 @@ def scheduled_fetch(model, likelihood):
     plt.ion()
     fig, ax = plt.subplots()
     t0 = time.time()
-    gp_update_interval = 20  # seconds
+    gp_update_interval = 30  # seconds
     (line_meas,) = ax.plot(0, 0, "k*")  # init measured data scatter
     (line_gp_mean,) = ax.plot(0, 0, "r")  # init GP mean line
     (line_pred_mean,) = ax.plot(0, 0, "g--")  # init prediction line
@@ -182,26 +181,30 @@ def scheduled_fetch(model, likelihood):
             # fetch and plot data:
             lines = fetch_and_plot_data(conn, lines, model, likelihood, t0)
 
-            # # update the GP Model every gp_update_interval:
-            # if (time.time() - t0) / gp_update_interval > i:
-            #     i += 1
-            #     # check to see if new parameters are available
-            #     cur = conn.cursor()
-            #     cur.execute(
-            #         "SELECT gp_update_avail FROM gp_table WHERE id = 1;"
-            #     )  # noqa
-            #     gp_update_avail = cur.fetchone()
-            #     if gp_update_avail:
-            #         # update model parameters if update available
-            #         model.load_state_dict(state_dict)
-            #         # set the flag to gp update un-available
-            #         cur.execute(
-            #             "UPDATE gp_table SET gp_update_avail = FALSE"
-            #             + "WHERE id = 1;"  # noqa
-            #         )
-            #     cur.close()
+            # update the GP Model every gp_update_interval:
+            if (time.time() - t0) / gp_update_interval > i:
+                i += 1
+                # check to see if new parameters are available
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT gp_update_avail FROM gp_table WHERE id = 1;"
+                )  # noqa
+                gp_update_avail = cur.fetchone()
+                print(f"gp_update_avail: {gp_update_avail}")
+                if gp_update_avail[0]:
+                    # update model parameters if update available
+                    state_dict = torch.load("data/model_state_test.pth")
+                    model.load_state_dict(state_dict)
+                    # set the flag to gp update un-available
+                    cur.execute(
+                        "UPDATE gp_table SET gp_update_avail = FALSE"
+                        + " WHERE id = 1;"  # noqa
+                    )
+                conn.commit()
+                cur.close()
 
             plt.pause(5)  # only fetch data every 2 seconds
+
     except KeyboardInterrupt:
         print("Stopped by user.")
     finally:
