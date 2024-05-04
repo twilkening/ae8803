@@ -10,8 +10,7 @@
 import psycopg2
 import time
 import matplotlib.pyplot as plt
-
-# from IPython.display import display, clear_output
+from IPython.display import display, clear_output
 import logging
 import numpy as np
 import torch
@@ -171,14 +170,20 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             plt.ylim([-0.06, 0.06])
             plt.draw()
         else:
-            ax.draw_artist(ax.patch)
-            ax.draw_artist(line_meas)
-            ax.draw_artist(line_gp_mean)
-            ax.draw_artist(line_pred_mean)
+            ax.cla()
+            (line_meas,) = ax.plot(
+                meas[0, :], meas[1, :], "k*"
+            )  # measured data scatter plot
+            (line_gp_mean,) = ax.plot(
+                gp_mean[0, :], gp_mean[1, :], "r"
+            )  # GP mean estimate line
+            (line_pred_mean,) = ax.plot(
+                pred_new[0, :], pred_new[1, :], 0, "g--"
+            )  # prediction line
             plt.xlim([0, 200])
             plt.ylim([-0.06, 0.06])
-            fig.canvas.draw()
-            fig.canvas.flush_events()
+            display(fig)
+            clear_output(wait=True)
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
@@ -203,6 +208,7 @@ def scheduled_fetch(model, likelihood):
     plt.ylabel(r"Pressure; $\Delta$P [kPa]")
     lines = [line_meas, line_gp_mean, line_pred_mean]
     i = 1
+    plt.pause(0.5)
     try:
         config = load_config()
         conn = psycopg2.connect(**config)
