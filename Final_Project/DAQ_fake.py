@@ -108,7 +108,7 @@ def get_new_data(ads_object, tstart):
 
 
 def create_tables():
-    """Create tables in the PostgreSQL database"""
+    logger.debug("""Creating tables in the PostgreSQL database""")
     drops = (
         """DROP TABLE IF EXISTS daq_table;""",
         """DROP TABLE IF EXISTS gp_table;""",
