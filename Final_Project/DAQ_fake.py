@@ -11,9 +11,16 @@ import psycopg2
 from time import sleep
 from qwiic_ads1115.qwiic_ads1115 import QwiicAds1115
 import time
+import logging
 import numpy as np
 from config import load_config
 
+
+logger = logging.getLogger(__name__)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(
+    filename="logs/daq_fake.log", filemode="w", format=FORMAT, level=logging.DEBUG
+)
 
 # configure the ADS1115
 ads = QwiicAds1115()
@@ -31,11 +38,11 @@ if ads.is_connected():
 
     # Confirm calibration set:
     if abs(ads.get_measurement()) > 0.1:
-        print("Pressure calibration has likely failed")
+        logger.debug("Pressure calibration has likely failed")
     else:
-        print("ADS1115 successfully initialized and calibrated")
+        logger.debug("ADS1115 successfully initialized and calibrated")
 else:
-    print("ADS1115 not connected")
+    logger.debug("ADS1115 not connected")
 
 # dictionary of ADS1115 data sampling rates
 rates = {
@@ -138,7 +145,7 @@ def create_tables():
                 # commit the new tables to database
                 conn.commit()
     except (psycopg2.DatabaseError, Exception) as error:
-        print(error)
+        logger.debug(error)
 
 
 # NOTE: before we can connect to the PostgreSQL database, it first has
@@ -186,6 +193,7 @@ if __name__ == "__main__":
             sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
     except KeyboardInterrupt:
         print("stopped by user.")
+        logger.debug("stopped by user.")
     finally:
         cur.close()
         conn.close()

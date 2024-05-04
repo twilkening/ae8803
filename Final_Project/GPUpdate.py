@@ -9,6 +9,7 @@
 
 import psycopg2
 import time
+import logging
 import numpy as np
 import torch
 import sys
@@ -22,6 +23,12 @@ if sys.platform == "win32":
 import gpytorch
 from config import load_config
 
+
+logger = logging.getLogger(__name__)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(
+    filename="logs/gpupdate.log", filemode="w", format=FORMAT, level=logging.DEBUG
+)
 
 train_num = 400
 
@@ -63,7 +70,7 @@ def GPUpdate(model, likelihood, conn):
         # Calc loss and backprop gradients
         loss = -mll(output, train_y)
         loss.backward()
-        print(
+        logger.debug(
             "Iter %d/%d - Loss: %.3f   th1: %.3f  th2: %.3f   noise: %.3f"
             % (
                 i + 1,
@@ -128,5 +135,6 @@ try:
 
 except KeyboardInterrupt:
     print("Stopped by user.")
+    logger.debug("Stopped by user.")
 finally:
     conn.close()
