@@ -171,13 +171,18 @@ def scheduled_fetch(model):
                 i += 1
                 # check to see if new parameters are available
                 cur = conn.cursor()
-                cur.execute("SELECT gp_update_avail FROM gp_table")
+                cur.execute(
+                    "SELECT gp_update_avail FROM gp_table WHERE id = 1;"
+                )  # noqa
                 gp_update_avail = cur.fetchone()
                 if gp_update_avail:
                     # update model parameters if update available
                     model.load_state_dict(state_dict)
                     # set the flag to gp update un-available
-                    cur.execute("UPDATE gp_table SET gp_update_avail = FALSE")
+                    cur.execute(
+                        "UPDATE gp_table SET gp_update_avail = FALSE"
+                        + "WHERE id = 1;"  # noqa
+                    )
                 cur.close()
             time.sleep(2)  # Fetch data every 2 seconds
     except KeyboardInterrupt:

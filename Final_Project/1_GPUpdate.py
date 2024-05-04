@@ -57,7 +57,8 @@ def GPUpdate(model, likelihood, conn):
     # collect last 100 observations from daq_table
     cur.execute("SELECT * FROM daq_table ORDER BY time DESC LIMIT 100")
     rows = cur.fetchall()
-    obs = np.asarray(rows).T  # transpose to (2, N) array
+    # transpose to (3, N) array, since it includes processed flag
+    obs = np.asarray(rows).T
     train_x = obs[0, :]
     train_y = obs[1, :]
 
@@ -96,7 +97,7 @@ def GPUpdate(model, likelihood, conn):
     torch.save(model.state_dict(), "data/model_state_test.pth")
 
     # set the flag for new gp hyperparameters available
-    cur.execute("UPDATE gp_table SET gp_update_avail = TRUE")
+    cur.execute("UPDATE gp_table SET gp_update_avail = TRUE WHERE id = 1;")
     cur.close()
 
 

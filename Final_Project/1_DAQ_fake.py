@@ -12,21 +12,8 @@ from time import sleep
 from qwiic_ads1115.qwiic_ads1115 import QwiicAds1115
 import time
 import numpy as np
+from config import load_config
 
-# NOTE: before we can connect to the PostgreSQL database, it first has
-# to be created from the command line interface via psql. See the
-# following webpages:
-# https://www.postgresqltutorial.com/postgresql-python/connect/
-# https://www.postgresqltutorial.com/postgresql-getting-started/install-postgresql-linux/
-
-# NOTE: we also need to *start* the PostgreSQL database everytime the
-# system is powered on:
-# sudo systemctl start postgresql
-# sudo systemctl enable postgresql
-
-# Connect to the PostgreSQL database
-conn = psycopg2.connect("dbname=test user=postgres")
-cur = conn.cursor()
 
 # configure the ADS1115
 ads = QwiicAds1115()
@@ -109,46 +96,97 @@ def get_new_data(ads_object, tstart):
     return data
 
 
-# initialize gp_table
-cur.execute("INSERT INTO gp_table (gp_update_avail) VALUES (%s)", (False))
-
-
-# initialize mean_table
-cur.execute(
-    " ".join(
-        [
-            "INSERT INTO mean_table",
-            "(time, meas_mean, processed)",
-            "VALUES (%s, %s, %s)",
-        ]
-    ),
-    (time.time(), 0, True),
-)
-
-
-# Insert data continuously
-try:
-    while True:
-        # Generate or receive your data
-        t0 = time.time()
-        data = get_new_data(ads, t0)
-        cur.executemany(
-            " ".join(
-                [
-                    "INSERT INTO daq_table",
-                    "(time, measured_value, processed)",
-                    "VALUES (%s, %s, %s)",
-                ]
-            ),
-            data,
+def create_tables():
+    """Create tables in the PostgreSQL database"""
+    drops = (
+        """DROP TABLE IF EXISTS daq_table;""",
+        """DROP TABLE IF EXISTS gp_table;""",
+        """DROP TABLE IF EXISTS mean_table;""",
+    )
+    commands = (
+        """
+        CREATE TABLE daq_table (
+            time FLOAT PRIMARY KEY,
+            measured_value FLOAT NOT NULL,
+            processed BOOLEAN NOT NULL DEFAULT FALSE
         )
-        conn.commit()
-        sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
-except KeyboardInterrupt:
-    print("stopped by user.")
-finally:
-    cur.close()
-    conn.close()
+        """,
+        """ CREATE TABLE gp_table (
+                id SERIAL PRIMARY KEY,
+                gp_update_avail BOOLEAN NOT NULL DEFAULT FALSE
+                )
+        """,
+        """
+        CREATE TABLE mean_table (
+            time FLOAT PRIMARY KEY,
+            meas_mean FLOAT NOT NULL,
+            processed BOOLEAN NOT NULL DEFAULT FALSE
+        )
+        """,
+    )
+    try:
+        config = load_config()  # sets connection to "test" database
+        with psycopg2.connect(**config) as conn:
+            with conn.cursor() as cur:
+                # execute the DROP TABLE statements
+                for drop in drops:
+                    cur.execute(drop)
+                # execute the CREATE TABLE statements
+                for command in commands:
+                    cur.execute(command)
+                # commit the new tables to database
+                conn.commit()
+    except (psycopg2.DatabaseError, Exception) as error:
+        print(error)
+
+
+# NOTE: before we can connect to the PostgreSQL database, it first has
+# to be created from the command line interface via psql. See the
+# following webpages:
+# https://www.postgresqltutorial.com/postgresql-python/connect/
+# https://www.postgresqltutorial.com/postgresql-getting-started/install-postgresql/
+# https://www.postgresqltutorial.com/postgresql-getting-started/install-postgresql-linux/
+
+# NOTE: we also need to *start* the PostgreSQL database everytime the
+# system is powered on:
+# sudo systemctl start postgresql
+# sudo systemctl enable postgresql
+
+
+if __name__ == "__main__":
+    create_tables()
+    # Connect to the PostgreSQL database
+    config = load_config()  # sets connection to "test" database
+    with psycopg2.connect(**config) as conn:
+        with conn.cursor() as cur:
+            # initialize gp_table
+            cur.execute(
+                "INSERT INTO gp_table (gp_update_avail) VALUES (FALSE)"  # noqa
+            )  # noqa
+    # initialize the
+    # # Insert data continuously
+    # try:
+    #     while True:
+    #         # Generate or receive your data
+    #         t0 = time.time()
+    #         data = get_new_data(ads, t0)
+    #         cur.executemany(
+    #             " ".join(
+    #                 [
+    #                     "INSERT INTO daq_table",
+    #                     "(time, measured_value, processed)",
+    #                     "VALUES (%s, %s, %s)",
+    #                 ]
+    #             ),
+    #             data,
+    #         )
+    #         conn.commit()
+    #         sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
+    # except KeyboardInterrupt:
+    #     print("stopped by user.")
+    # finally:
+    #     cur.close()
+    #     conn.close()
 
 # if we only want one measurement per entry
 # # Define function to get one set of new data
