@@ -6,3 +6,4 @@ __pycache__
 database.ini
 *.stackdump
 *.log
+psql_jetbot_connect_test.py
