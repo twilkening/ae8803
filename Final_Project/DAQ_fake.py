@@ -196,6 +196,7 @@ if __name__ == "__main__":
                 data,
             )
             conn.commit()
+            logger.debug(f"New data committed.")
             sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
     except KeyboardInterrupt:
         print("stopped by user.")
