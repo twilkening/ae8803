@@ -10,7 +10,8 @@
 import psycopg2
 import time
 import matplotlib.pyplot as plt
-from IPython.display import display, clear_output
+
+# from IPython.display import display, clear_output
 import logging
 import numpy as np
 import torch
@@ -27,7 +28,10 @@ from config import load_config
 
 
 logger = logging.getLogger(__name__)
-FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(asctime)s : %(message)s"
+FORMAT = (
+    "[%(filename)s:%(lineno)s - %(funcName)20s() ] "
+    + "%(asctime)s : %(message)s"  # noqa
+)  # noqa
 logging.basicConfig(
     filename="logs/plot.log",
     filemode="w",
@@ -38,6 +42,7 @@ logging.basicConfig(
 
 train_num = 400
 torch.set_default_dtype(torch.float64)
+
 
 def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
     # Perform Regression on the new data
@@ -90,7 +95,7 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
 
     # add to mean_table the (possibly re-processed) obs_mean data, flag
     # as un-processed
-    data = [
+    mean_new = [
         (
             gp_mean_new[0, -num_new + i].astype(np.double),
             gp_mean_new[1, -num_new + i].astype(np.double),
@@ -107,7 +112,7 @@ def GPRegression(conn, meas, meas_new, test_x, model, likelihood):
                     "VALUES (%s, %s, %s)",
                 ]
             ),
-            data,
+            mean_new,
         )
         conn.commit()
 
@@ -154,7 +159,9 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             logger.debug("replacing the entire old mean line")
             gp_mean = gp_mean_new
         else:
-            logger.debug(f"replacing only the last {train_num} entries to mean line")
+            logger.debug(
+                f"replacing only the last {train_num} entries to mean line"
+            )  # noqa
             logger.debug(f"gp_mean_new length: {gp_mean_new.shape[1]}")
             gp_mean = np.hstack((gp_mean_old[:, :-train_num], gp_mean_new))
 
@@ -170,20 +177,14 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             plt.ylim([-0.06, 0.06])
             plt.draw()
         else:
-            ax.cla()
-            (line_meas,) = ax.plot(
-                meas[0, :], meas[1, :], "k*"
-            )  # measured data scatter plot
-            (line_gp_mean,) = ax.plot(
-                gp_mean[0, :], gp_mean[1, :], "r"
-            )  # GP mean estimate line
-            logger.debug(pred_new)
-            (line_pred_mean,) = ax.plot(
-                pred_new[0, :], pred_new[1, :], "g--"
-            )  # prediction line
+            ax.draw_artist(ax.patch)
+            ax.draw_artist(line_meas)
+            ax.draw_artist(line_gp_mean)
+            ax.draw_artist(line_pred_mean)
             plt.xlim([0, 200])
             plt.ylim([-0.06, 0.06])
-            display(fig)
+            fig.canvas.draw()
+            fig.canvas.flush_events()
 
         new_lines = [line_meas, line_gp_mean, line_pred_mean]
     else:
@@ -209,13 +210,14 @@ def scheduled_fetch(model, likelihood):
     plt.ylabel(r"Pressure; $\Delta$P [kPa]")
     lines = [line_meas, line_gp_mean, line_pred_mean]
     i = 1
-    plt.pause(0.5)
     try:
         config = load_config()
         conn = psycopg2.connect(**config)
         while True:
             # fetch and plot data:
-            lines = fetch_and_plot_data(conn, lines, model, likelihood, t0, fig, ax)
+            lines = fetch_and_plot_data(
+                conn, lines, model, likelihood, t0, fig, ax
+            )  # noqa
 
             # update the GP Model every gp_update_interval:
             if (time.time() - t0) / gp_update_interval > i:
@@ -239,10 +241,7 @@ def scheduled_fetch(model, likelihood):
                 conn.commit()
                 cur.close()
 
-            clear_output(wait=True)
-            time.sleep(5)
-#             plt.pause(10)  # only fetch data every n seconds
-
+            plt.pause(5)  # only fetch data every n seconds
 
     except KeyboardInterrupt:
         logger.debug("Stopped by user.")
