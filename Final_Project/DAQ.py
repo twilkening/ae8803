@@ -94,7 +94,7 @@ def get_new_data(ads_object):
 
 
 def create_tables():
-    """Create tables in the PostgreSQL database"""
+    logger.debug("""Creating tables in the PostgreSQL database""")
     drops = (
         """DROP TABLE IF EXISTS daq_table;""",
         """DROP TABLE IF EXISTS gp_table;""",
@@ -156,6 +156,7 @@ if __name__ == "__main__":
     # Connect to the PostgreSQL database
     config = load_config()  # sets connection to "test" database
     with psycopg2.connect(**config) as conn:
+        logger.debug("Connected to server")
         with conn.cursor() as cur:
             # initialize gp_table
             cur.execute(
@@ -168,7 +169,7 @@ if __name__ == "__main__":
         t0 = time.time()
         while True:
             # Generate or receive your data
-            data = get_new_data(ads, t0)
+            data = get_new_data(ads)
             cur.executemany(
                 " ".join(
                     [
@@ -180,6 +181,7 @@ if __name__ == "__main__":
                 data,
             )
             conn.commit()
+            logger.debug(f"New data committed.")
             sleep(1 / rates[ads.data_rate])  # Pause for sampling period (sec)
     except KeyboardInterrupt:
         print("stopped by user.")
