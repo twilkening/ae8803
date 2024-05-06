@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# 1_GPUpdate.py
+# GPUpdate.py
 #
 # Python script to plot collected data from the PostgreSQL database.
 #

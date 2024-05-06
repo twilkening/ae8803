@@ -128,18 +128,26 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
     # convert to array and transpose to (2, N) so can stack with old data
     meas_new = np.asarray(rows).T
     if len(meas_new) != 0:
-        # plot new data alongside the old data
-        line_meas = lines[0]
-        meas_new[0, :] = meas_new[0, :] - tstart  # shift x
-        meas_old = np.asarray(line_meas.get_data())  # outputs (2, N) array
-        meas = np.hstack((meas_old, meas_new))
-        line_meas.set_data(meas[0, :], meas[1, :])
-        # mark the measured data as processed:
+        # mark the measured data as processed (first, so no delay)
         cur.execute(
             "UPDATE daq_table SET processed = TRUE WHERE processed = FALSE"  # noqa
         )  # noqa
         conn.commit()
         cur.close()
+
+        # sort new measured data by time
+        meas_new = meas_new[:, meas_new[0, :].argsort()]
+        meas_new[0, :] = meas_new[0, :] - tstart  # shift x
+
+        # get old data
+        line_meas = lines[0]
+        meas_old = np.asarray(line_meas.get_data())  # outputs (2, N) array
+        # sort old measured data by time
+        meas_old = meas_old[:, meas_old[0, :].argsort()]
+        # stack old and new together
+        meas = np.hstack((meas_old, meas_new))
+        # plot new data alongside the old data
+        line_meas.set_data(meas[0, :], meas[1, :])
 
         # calculate regression
         # based on the measured data, and the GPModel, compute expected mean
@@ -174,7 +182,9 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
         # update the plot
         if __name__ == "__main__":
             plt.xlim([0, 200])
-            plt.ylim([-0.06, 0.06])
+            # plt.ylim([-1.25 * min(meas[1, :]), 1.25 * max(meas[1,
+            # :])])
+            plt.ylim([-0.02, 0.02])
             plt.draw()
         else:
             ax.draw_artist(ax.patch)
@@ -182,7 +192,7 @@ def fetch_and_plot_data(conn, lines, model, likelihood, tstart, fig, ax):
             ax.draw_artist(line_gp_mean)
             ax.draw_artist(line_pred_mean)
             plt.xlim([0, 200])
-            plt.ylim([-0.06, 0.06])
+            plt.ylim([-0.01, 0.01])
             fig.canvas.draw()
             fig.canvas.flush_events()
 
